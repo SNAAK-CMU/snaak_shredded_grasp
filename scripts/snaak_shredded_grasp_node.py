@@ -9,12 +9,15 @@ from snaak_weight_read.srv import ReadWeight
 import numpy as np
 import collections
 from snaak_shredded_grasp_utils import DefaultGraspGenerator
+from granular_grasp_utils import GranularGraspMethod, CoordConverter
+
 
 GRASP_TECHNIQUE = ""
 
+
 class ShreddedGraspServer(Node):
     def __init__(self):
-        super().__init__('snaak_shredded_grasp')
+        super().__init__("snaak_shredded_grasp")
 
         self._depth_subscription = self.create_subscription(
             Image, "/camera/camera/depth/image_rect_raw", self.depth_callback, 10
@@ -28,9 +31,11 @@ class ShreddedGraspServer(Node):
         self.depth_image = None
         self.rgb_image = None
 
-        self._service = self.create_service(GetGraspPose, 
-                                            self.get_name() + "/get_grasp_pose", 
-                                            self.get_grasp_pose_callback)
+        self._service = self.create_service(
+            GetGraspPose,
+            self.get_name() + "/get_grasp_pose",
+            self.get_grasp_pose_callback,
+        )
 
         self._get_weight_left_bins = self.create_client(
             ReadWeight, "/snaak_weight_read/snaak_scale_bins_left/read_weight"
@@ -41,13 +46,14 @@ class ShreddedGraspServer(Node):
         self.depth_queue = collections.deque(maxlen=5)
 
         if GRASP_TECHNIQUE == "GG":
-            pass
+            self.action_generator = GranularGraspMethod()
         elif GRASP_TECHNIQUE == "CLASSICAL":
             pass
         else:
-            self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
+            self.action_generator = (
+                DefaultGraspGenerator()
+            )  # this is a dummy for testing
 
-        
     def get_grasp_pose_callback(self, request, response):
         try:
             location_id = request.location_id
@@ -74,13 +80,15 @@ class ShreddedGraspServer(Node):
             # TODO: this may not work
             depth_image = np.mean(self.depth_queue, axis=0).astype(np.float32)
 
-            action = self.action_generator.get_action(self.rgb_image, 
-                                                      depth_image, 
-                                                      weight, 
-                                                      ingredient_name, 
-                                                      pickup_weight, 
-                                                      location_id)
-            
+            action = self.action_generator.get_action(
+                self.rgb_image,
+                depth_image,
+                weight,
+                ingredient_name,
+                pickup_weight,
+                location_id,
+            )
+
             response.x = action[0]
             response.y = action[1]
             response.z = action[2]
@@ -119,7 +127,7 @@ class ShreddedGraspServer(Node):
             self.rgb_image = None
 
     def get_weight(self, location_id):
-        if (location_id == 1 or location_id == 2 or location_id == 3):
+        if location_id == 1 or location_id == 2 or location_id == 3:
             client = self._get_weight_left_bins
         else:
             client = self._get_weight_right_bins
