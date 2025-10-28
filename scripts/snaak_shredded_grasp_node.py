@@ -33,10 +33,10 @@ class ShreddedGraspServer(Node):
                                             self.get_grasp_pose_callback)
 
         self._get_weight_left_bins = self.create_client(
-            ReadWeight, "/snaak_weight_read/snaak_scale_bins_left/read_weight"
+            ReadWeight, "snaak_weight_read/snaak_scale_bins_left/read_weight"
         )
         self._get_weight_right_bins = self.create_client(
-            ReadWeight, "/snaak_weight_read/snaak_scale_bins_right/read_weight"
+            ReadWeight, "snaak_weight_read/snaak_scale_bins_right/read_weight"
         )
         self.depth_queue = collections.deque(maxlen=5)
 
@@ -46,6 +46,8 @@ class ShreddedGraspServer(Node):
             pass
         else:
             self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
+        
+        self.get_logger().info("Shredded Grasp Server is ready to receive requests.")
 
         
     def get_grasp_pose_callback(self, request, response):
@@ -53,6 +55,7 @@ class ShreddedGraspServer(Node):
             location_id = request.location_id
             ingredient_name = request.ingredient_name
             pickup_weight = request.desired_pickup_weight
+            self.get_logger().info("Generating grasp action...")
 
             if self.rgb_image is None:
                 self.get_logger().error("No RGB image data received yet")
@@ -62,7 +65,9 @@ class ShreddedGraspServer(Node):
                 self.get_logger().error("No depth image data received yet")
                 raise Exception("No depth image data")
 
-            weight = self.get_weight(location_id)
+            # use dummy weight for now
+            weight = 0 # self.get_weight(location_id)
+
             if weight is None:
                 self.get_logger().error("Failed to get weight")
                 raise Exception("Failed to get weight")
@@ -73,17 +78,18 @@ class ShreddedGraspServer(Node):
 
             # TODO: this may not work
             depth_image = np.mean(self.depth_queue, axis=0).astype(np.float32)
-
+            self.get_logger().info("Generating grasp action...")
             action = self.action_generator.get_action(self.rgb_image, 
                                                       depth_image, 
                                                       weight, 
                                                       ingredient_name, 
                                                       pickup_weight, 
                                                       location_id)
+            self.get_logger().info(f"Grasp action generated: {action}")
             
-            response.x = action[0]
-            response.y = action[1]
-            response.z = action[2]
+            response.x = 0.0#action[0]
+            response.y = 0.0#action[1]
+            response.z = 0.0#action[2]
         except Exception as e:
             self.get_logger().error(f"Error processing grasp pose request: {e}")
             response.x = response.y = response.z = float("nan")
@@ -118,24 +124,33 @@ class ShreddedGraspServer(Node):
             )
             self.rgb_image = None
 
-    def get_weight(self, location_id):
-        if (location_id == 1 or location_id == 2 or location_id == 3):
-            client = self._get_weight_left_bins
-        else:
-            client = self._get_weight_right_bins
+    # TODO: debug why this is hanging
+    # def get_weight(self, location_id):
+    #     if (location_id == 1 or location_id == 2 or location_id == 3):
+    #         client = self._get_weight_right_bins
+    #     else:
+    #         client = self._get_weight_left_bins
 
-        if not client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().error("Service not available")
-            return None
+    #     request = ReadWeight.Request()
 
-        request = ReadWeight.Request()
-        request.location_id = location_id
+    #     future = client.call_async(request)
 
-        future = client.call_async(request)
-        rclpy.spin_until_future_complete(self, future)
+    #     rclpy.spin_until_future_complete(self, future)
 
-        if future.result() is not None:
-            return future.result().weight
-        else:
-            self.get_logger().error("Failed to read weight")
-            return None
+    #     # if future.result() is not None:
+    #     #     return future.result().weight
+    #     # else:
+    #     #     self.get_logger().error("Failed to read weight")
+    #     #     return None
+    #     return future.result().weight.data
+
+if __name__ == '__main__':
+    rclpy.init()
+    try:
+        node = ShreddedGraspServer()
+        rclpy.spin(node)
+    except Exception as e:
+        print(f"Exception in ShreddedGraspServer: {e}")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
