@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
+import cv2
+import numpy as np
+import trace
+import collections
+import traceback
+
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
+
 from snaak_shredded_grasp.srv import GetGraspPose
-import cv2
 from snaak_weight_read.srv import ReadWeight
-import numpy as np
-import collections
 from snaak_shredded_grasp_utils import DefaultGraspGenerator
 from granular_grasp_utils import GranularGraspMethod, CoordConverter
 
 
-GRASP_TECHNIQUE = ""
+GRASP_TECHNIQUE = "GG"
 
 
 class ShreddedGraspServer(Node):
@@ -142,8 +146,20 @@ class ShreddedGraspServer(Node):
 
     #     rclpy.spin_until_future_complete(self, future)
 
-        # if future.result() is not None:
-        #     return future.result().weight
-        # else:
-        #     self.get_logger().error("Failed to read weight")
-        #     return None
+    #     if future.result() is not None:
+    #         return future.result().weight
+    #     else:
+    #         self.get_logger().error("Failed to read weight")
+    #         return None
+
+if __name__ == '__main__':
+    rclpy.init()
+    try:
+        node = ShreddedGraspServer()
+        rclpy.spin(node)
+    except Exception as e:
+        print(f"Exception in ShreddedGraspServer: {e}")
+        traceback.print_exc()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
