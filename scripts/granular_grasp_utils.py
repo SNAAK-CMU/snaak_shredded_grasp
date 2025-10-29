@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 import torchvision.transforms as T
+import torch.nn as nn
 
 # Constants copied from data_utils.py
 WINDOW_SIZE = 50  # (pixels) The model architecture depends on this!
@@ -311,14 +312,14 @@ class GranularGraspMethod:
         # Initialize coordinate converter
         self.coord_converter = CoordConverter()
 
-    def __get_best_xy_for_weight(self, rgb_img, depth_img, desired_weight):
+    def __get_best_xy_for_weight(self, rgb_img, depth_img, w_desired):
         """
         Find the best x,y coordinates for a desired weight given RGB and depth images.
 
         Args:
             rgb_img: RGB image (numpy array)
             depth_img: Depth image (numpy array)
-            desired_weight: Target weight to grasp
+            w_desired: Target weight to grasp
 
         Returns:
             tuple: (best_x, best_y) coordinates in meters
@@ -477,7 +478,7 @@ class GranularGraspMethod:
         depth_img,
         bin_weight,
         ingredient_name,
-        desired_weight,
+        w_desired,
         location_id,
     ):
         """
@@ -488,13 +489,13 @@ class GranularGraspMethod:
             depth_img: Depth image (numpy array)
             bin_weight: Weight of the bin
             ingredient_name: Name of the ingredient
-            desired_weight: Desired weight to grasp
+            w_desired: Desired weight to grasp
             location_id: ID of the location where the ingredient is located
         Returns:
             tuple: (action_x, action_y, action_z) in bin coordinate frame
         """
         best_x_pix, best_y_pix = self.__get_best_xy_for_weight(
-            rgb_img, depth_img, desired_weight
+            rgb_img, depth_img, w_desired
         )
 
         action_x, action_y = self.coord_converter.pix_xy_to_action(

@@ -101,6 +101,7 @@ class ShreddedGraspServer(Node):
             response.z = action[2]
         except Exception as e:
             self.get_logger().error(f"Error processing grasp pose request: {e}")
+            traceback.print_exc()
             response.x = response.y = response.z = float("nan")
         finally:
             return response
