@@ -9,6 +9,8 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 import torch.nn as nn
 
+from snaak_shredded_grasp_utils import GraspGenerator
+
 # Constants copied from data_utils.py
 WINDOW_SIZE = 50  # (pixels) The model architecture depends on this!
 
@@ -285,7 +287,7 @@ class MassEstimationModel(nn.Module):
         return mass_estimate
 
 
-class GranularGraspMethod:
+class GranularGraspMethod(GraspGenerator):
     """
     Neural network class for granular grasping that predicts the best x,y coordinates
     for a desired weight given RGB and depth images.
