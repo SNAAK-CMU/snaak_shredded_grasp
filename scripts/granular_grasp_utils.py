@@ -71,6 +71,14 @@ class CoordConverter:
 
         return (action_x_pix, action_y_pix)
 
+    def pix_xy_to_action(self, x_pix, y_pix, img_w=BIN_WIDTH_PIX, img_h=BIN_LENGTH_PIX):
+        x_disp_pix = x_pix - img_w // 2
+        y_disp_pix = y_pix - img_h // 2
+        x_disp_m, y_disp_m = self.pix_to_m(x_disp_pix, y_disp_pix)
+        action_x_m = -x_disp_m
+        action_y_m = y_disp_m
+        return (action_x_m, action_y_m)
+
 
 def create_transform_rgb():
     """Create RGB transformation pipeline"""
