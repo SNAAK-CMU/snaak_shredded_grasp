@@ -511,4 +511,5 @@ class GranularGraspMethod:
         )
         action_z = self.__get_z_from_depth(action_x, action_y, depth_img)
 
-        return action_x, action_y, action_z
+        action = (float(action_x), float(action_y), float(action_z))
+        return action
