@@ -14,9 +14,10 @@ from snaak_shredded_grasp.srv import GetGraspPose
 from snaak_weight_read.srv import ReadWeight
 from snaak_shredded_grasp_utils import DefaultGraspGenerator
 from granular_grasp_utils import GranularGraspMethod, CoordConverter
+from classical_grasp_utils import ClassicalGraspGenerator
 
-
-GRASP_TECHNIQUE = "GG"
+# GRASP_TECHNIQUE = "GG"
+GRASP_TECHNIQUE = "CLASSICAL"
 
 
 class ShreddedGraspServer(Node):
@@ -52,7 +53,7 @@ class ShreddedGraspServer(Node):
         if GRASP_TECHNIQUE == "GG":
             self.action_generator = GranularGraspMethod()
         elif GRASP_TECHNIQUE == "CLASSICAL":
-            pass
+            self.action_generator = ClassicalGraspGenerator()
         else:
             self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
         
