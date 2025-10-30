@@ -18,6 +18,9 @@ from granular_grasp_utils import GranularGraspMethod, CoordConverter
 
 GRASP_TECHNIQUE = "GG"
 
+RIGHT_BIN_IDS = [1, 2, 3]
+LEFT_BIN_IDS = [4, 5, 6]
+
 
 class ShreddedGraspServer(Node):
     def __init__(self):
@@ -42,10 +45,10 @@ class ShreddedGraspServer(Node):
         )
 
         self._get_weight_left_bins = self.create_client(
-            ReadWeight, "snaak_weight_read/snaak_scale_bins_left/read_weight"
+            ReadWeight, "/snaak_weight_read/snaak_scale_bins_left/read_weight"
         )
         self._get_weight_right_bins = self.create_client(
-            ReadWeight, "snaak_weight_read/snaak_scale_bins_right/read_weight"
+            ReadWeight, "/snaak_weight_read/snaak_scale_bins_right/read_weight"
         )
         self.depth_queue = collections.deque(maxlen=5)
 
@@ -66,6 +69,9 @@ class ShreddedGraspServer(Node):
             pickup_weight = request.desired_pickup_weight
             self.get_logger().info("Generating grasp action...")
 
+            weight = self.get_weight(location_id)
+            self.get_logger().info(f"Current weight at location {location_id}: {weight}g")
+
             if self.rgb_image is None:
                 self.get_logger().error("No RGB image data received yet")
                 raise Exception("No RGB image data")
@@ -74,8 +80,7 @@ class ShreddedGraspServer(Node):
                 self.get_logger().error("No depth image data received yet")
                 raise Exception("No depth image data")
 
-            # use dummy weight for now
-            weight = 0 # self.get_weight(location_id)
+            
 
             if weight is None:
                 self.get_logger().error("Failed to get weight")
@@ -134,24 +139,28 @@ class ShreddedGraspServer(Node):
             )
             self.rgb_image = None
 
-    # TODO: debug why this is hanging
-    # def get_weight(self, location_id):
-    #     if (location_id == 1 or location_id == 2 or location_id == 3):
-    #         client = self._get_weight_right_bins
-    #     else:
-    #         client = self._get_weight_left_bins
+    def get_weight(self, location_id):
+        if location_id in RIGHT_BIN_IDS:
+            client = self._get_weight_right_bins
+        elif location_id in LEFT_BIN_IDS:
+            client = self._get_weight_left_bins
+        else:
+            self.get_logger().error(f"Invalid location ID: {location_id}")
+            return None
 
-    #     request = ReadWeight.Request()
+        request = ReadWeight.Request()
 
-    #     future = client.call_async(request)
+        self.get_logger().info(f"Requesting weight for location ID: {location_id}")
 
-    #     rclpy.spin_until_future_complete(self, future)
+        future = client.call_async(request)
 
-    #     if future.result() is not None:
-    #         return future.result().weight
-    #     else:
-    #         self.get_logger().error("Failed to read weight")
-    #         return None
+        rclpy.spin_until_future_complete(self, future)
+
+        if future.result() is not None:
+            return future.result().weight
+        else:
+            self.get_logger().error("Failed to read weight")
+            return None
 
 if __name__ == '__main__':
     rclpy.init()
