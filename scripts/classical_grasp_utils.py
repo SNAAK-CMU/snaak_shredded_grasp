@@ -52,9 +52,14 @@ class ClassicalGraspGenerator(GraspGenerator):
         cropped = cropped #+ np.array(BIN_OFFSET)
         xmin, ymin, xmax, ymax = BIN_COORDS[bin_number - 1] + np.array(BIN_OFFSET)
 
-        cropped = cv2.GaussianBlur(cropped, (5,5), 0)
+        # cropped = cv2.GaussianBlur(cropped, (5,5), 0)
         
         cropped = cv2.medianBlur((cropped).astype(np.uint8), 7)
+        cropped = cv2.erode(cropped, None, iterations=2)
+        cropped = cv2.dilate(cropped, None, iterations=2)
+
+        kernel_size = 15
+        cropped = cv2.blur(cropped, (kernel_size, kernel_size))
 
         disp = cv2.cvtColor((cropped / np.max(cropped) * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 
@@ -62,12 +67,13 @@ class ClassicalGraspGenerator(GraspGenerator):
         depth = -cropped.astype(np.float32)
 
         # softmax over inverted depth
-        flat_vals = depth.flatten()
-        exp_vals = np.exp(flat_vals - np.max(flat_vals))  # stability trick
-        probs = exp_vals / np.sum(exp_vals)
+        # flat_vals = depth.flatten()
+        # exp_vals = np.exp(flat_vals - np.max(flat_vals))  # stability trick
+        # probs = exp_vals / np.sum(exp_vals)
 
-        idx = np.argmax(probs)
-        y_sampled, x_sampled = np.unravel_index(idx, depth.shape)
+        # idx = np.argmax(probs)
+        # y_sampled, x_sampled = np.unravel_index(idx, depth.shape)
+        y_sampled, x_sampled = np.unravel_index(np.argmax(depth), depth.shape)
 
         # offsets from center of cropped bin
         h_crop, w_crop = cropped.shape[:2]
