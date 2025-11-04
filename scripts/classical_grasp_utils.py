@@ -16,21 +16,33 @@ BIN_DEPTH = 0.058
 END_EFFECTOR_RADIUS = 0.045
 BIN_WIDTH = 0.140
 BIN_LENGTH = 0.240
-
+CAM2BIN_DEPTH = 320
 class ClassicalGraspGenerator(GraspGenerator):
     def __init__(self):
         super().__init__()
     
-    def crop(self, image, location_id, resize=(224, 340)):
-        xmin, ymin, xmax, ymax = BIN_COORDS[location_id - 1] + np.array(BIN_OFFSET)
-        cropped = image[ymin:ymax, xmin:xmax]
-        if location_id in [4, 5, 6]:
+    def clip_depth_bin(self, depth_map, bin_height=65):
+        depth_wrt_bin = depth_map - (CAM2BIN_DEPTH)
+        
+        depth_clipped = np.where(
+            (depth_wrt_bin < 0) ,
+            bin_height,  
+            depth_wrt_bin,
+            )
+        return depth_clipped
+        
+    def crop(self, image, location_id):
+        # xmin, ymin, xmax, ymax = BIN_COORDS[location_id - 1] + np.array(BIN_OFFSET)
+        cropped = image[143:262, 156:386]
+        ymin, ymax, xmin, xmax = 143, 262, 156, 386
+        # cropped = image[ymin:ymax, xmin:xmax]
+        if location_id in [1,2,3]:
             cropped = cv2.rotate(cropped, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-        if resize is not None:
-            cropped = cv2.resize(cropped, resize)
+        # if resize is not None:
+        #     cropped = cv2.resize(cropped, resize)
 
-        return cropped
+        return cropped, (xmin, ymin, xmax, ymax)
 
     def sample_point_from_bin(self, image, bin_number, verbose=False):
         """
@@ -47,32 +59,21 @@ class ClassicalGraspGenerator(GraspGenerator):
             (x_global, y_global): coordinates of sampled point in original image.
         """
         # xmin, ymin, xmax, ymax = np.array(BIN_COORDS[bin_number-1]) + np.array(BIN_OFFSET)
-
-        cropped = self.crop(image, bin_number) 
-        cropped = cropped #+ np.array(BIN_OFFSET)
-        xmin, ymin, xmax, ymax = BIN_COORDS[bin_number - 1] + np.array(BIN_OFFSET)
-
-        # cropped = cv2.GaussianBlur(cropped, (5,5), 0)
         
+        cropped , (xmin, ymin, xmax, ymax) = self.crop(image, bin_number) 
+        # cropped = self.clip_depth_bin(cropped)
+
         cropped = cv2.medianBlur((cropped).astype(np.uint8), 7)
         cropped = cv2.erode(cropped, None, iterations=2)
         cropped = cv2.dilate(cropped, None, iterations=2)
 
-        kernel_size = 15
+        kernel_size = 30
         cropped = cv2.blur(cropped, (kernel_size, kernel_size))
 
         disp = cv2.cvtColor((cropped / np.max(cropped) * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 
-        # use negative depth so smaller depths have higher weights
         depth = -cropped.astype(np.float32)
 
-        # softmax over inverted depth
-        # flat_vals = depth.flatten()
-        # exp_vals = np.exp(flat_vals - np.max(flat_vals))  # stability trick
-        # probs = exp_vals / np.sum(exp_vals)
-
-        # idx = np.argmax(probs)
-        # y_sampled, x_sampled = np.unravel_index(idx, depth.shape)
         y_sampled, x_sampled = np.unravel_index(np.argmax(depth), depth.shape)
 
         # offsets from center of cropped bin
@@ -99,7 +100,7 @@ class ClassicalGraspGenerator(GraspGenerator):
             cv2.imshow("Colorful Depth Map with Sampled Point", depth_colored)
             # cv2.imshow("cropped", disp)
             # cv2.waitKey(0)
-            cv2.waitKey(5000)
+            cv2.waitKey(10000)
             cv2.destroyAllWindows()
 
         return (dx, dy), (x_global, y_global)    
@@ -153,8 +154,8 @@ class ClassicalGraspGenerator(GraspGenerator):
         """
         x, y, z = action
 
-        y = np.clip(x, -BIN_LENGTH/2 - END_EFFECTOR_RADIUS, BIN_LENGTH/2 - END_EFFECTOR_RADIUS)
-        x = np.clip(y, -BIN_WIDTH/2 - END_EFFECTOR_RADIUS, BIN_WIDTH/2 - END_EFFECTOR_RADIUS)
+        y = np.clip(y, -BIN_LENGTH/2 - END_EFFECTOR_RADIUS, BIN_LENGTH/2 - END_EFFECTOR_RADIUS)
+        x = np.clip(x, -BIN_WIDTH/2 - END_EFFECTOR_RADIUS, BIN_WIDTH/2 - END_EFFECTOR_RADIUS)
         z = np.clip(z, 0.0, BIN_DEPTH)
 
         return (x, y, z)
