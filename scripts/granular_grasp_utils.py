@@ -36,21 +36,34 @@ Z_BELOW_SURFACE = 0.030
 
 GG_MODEL_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model.pth"
 
+def rotate_image_clockwise(image, angle_deg):
+    (h, w) = image.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, -angle_deg, 1.0)  # negative for clockwise
+    if len(image.shape) == 3:
+        border_value = (0, 0, 0)
+    else:
+        border_value = 0
+    rotated = cv2.warpAffine(
+        image,
+        M,
+        (w, h),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=border_value,
+    )
+    return rotated
 
 class CoordConverter:
     def __init__(
         self,
-        bin_width_m=BIN_WIDTH_M,
-        bin_length_m=BIN_LENGTH_M,
-        bin_height_m=BIN_HEIGHT,
-        bin_width_pix=BIN_WIDTH_PIX,
-        bin_length_pix=BIN_LENGTH_PIX,
+        bin_dims_dict,
     ):
-        self.bin_width_m = bin_width_m
-        self.bin_length_m = bin_length_m
-        self.bin_height_m = bin_height_m
-        self.bin_width_pix = bin_width_pix
-        self.bin_length_pix = bin_length_pix
+        self.bin_width_m = bin_dims_dict["width_m"]
+        self.bin_length_m = bin_dims_dict["length_m"]
+        self.bin_height_m = bin_dims_dict["height"]
+        self.bin_width_pix = bin_dims_dict["width_pix"]
+        self.bin_length_pix = bin_dims_dict["length_pix"]
 
     def m_to_pix(self, x_m, y_m):
         x_pix = int(x_m * self.bin_width_pix / self.bin_width_m)
@@ -62,20 +75,20 @@ class CoordConverter:
         y_m = y_pix * self.bin_length_m / self.bin_length_pix
         return x_m, y_m
 
-    def action_xy_to_pix(self, action_x_m, action_y_m, img_w, img_h):
+    def action_xy_to_pix(self, action_x_m, action_y_m):
         x_disp_pix, y_disp_pix = self.m_to_pix(action_x_m, action_y_m)
-        action_x_pix = img_w // 2 - x_disp_pix
-        action_y_pix = img_h // 2 + y_disp_pix
+        action_x_pix = self.bin_width_pix // 2 - x_disp_pix
+        action_y_pix = self.bin_length_pix // 2 + y_disp_pix
 
         # Clip the action points to the image boundaries
-        action_x_pix = np.clip(action_x_pix, 0, img_w - 1)
-        action_y_pix = np.clip(action_y_pix, 0, img_h - 1)
+        action_x_pix = np.clip(action_x_pix, 0, self.bin_width_pix - 1)
+        action_y_pix = np.clip(action_y_pix, 0, self.bin_length_pix - 1)
 
         return (action_x_pix, action_y_pix)
 
-    def pix_xy_to_action(self, x_pix, y_pix, img_w=BIN_WIDTH_PIX, img_h=BIN_LENGTH_PIX):
-        x_disp_pix = x_pix - img_w // 2
-        y_disp_pix = y_pix - img_h // 2
+    def pix_xy_to_action(self, x_pix, y_pix):
+        x_disp_pix = x_pix - self.bin_width_pix // 2
+        y_disp_pix = y_pix - self.bin_length_pix // 2
         x_disp_m, y_disp_m = self.pix_to_m(x_disp_pix, y_disp_pix)
         action_x_m = -x_disp_m
         action_y_m = y_disp_m
