@@ -50,12 +50,14 @@ class ShreddedGraspServer(Node):
         )
         self.depth_queue = collections.deque(maxlen=5)
 
-        if GRASP_TECHNIQUE == "GG":
-            self.action_generator = GranularGraspMethod()
-        elif GRASP_TECHNIQUE == "CLASSICAL":
-            self.action_generator = ClassicalGraspGenerator()
-        else:
-            self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
+        # if GRASP_TECHNIQUE == "GG":
+        #     self.action_generator = GranularGraspMethod()
+        # elif GRASP_TECHNIQUE == "CLASSICAL":
+        #     self.action_generator = ClassicalGraspGenerator()
+        # else:
+        #     self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
+        self.action_generator_gg = GranularGraspMethod()
+        self.action_generator_classical = ClassicalGraspGenerator()
         
         self.get_logger().info("Shredded Grasp Server is ready to receive requests.")
 
@@ -86,15 +88,17 @@ class ShreddedGraspServer(Node):
                 f"Received request for grasp pose. Location ID: {location_id}, Ingredient: {ingredient_name}"
             )
 
-            # TODO: this may not work
             depth_image = np.mean(self.depth_queue, axis=0).astype(np.float32)
             self.get_logger().info("Generating grasp action...")
-            action = self.action_generator.get_action(self.rgb_image, 
-                                                      depth_image, 
-                                                      weight, 
-                                                      ingredient_name, 
-                                                      pickup_weight, 
-                                                      location_id)
+
+            if "lettuce" in ingredient_name.lower():
+                action_generator = self.action_generator_gg
+            elif "onion" in ingredient_name.lower():
+                action_generator = self.action_generator_classical
+
+            action = action_generator.get_action(
+                self.rgb_image, depth_image, weight, ingredient_name, pickup_weight, location_id
+            )
             self.get_logger().info(f"Grasp action generated: {action}")
             
             response.x = action[0]
