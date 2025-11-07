@@ -62,7 +62,7 @@ CROP_COORDS_DICT = {
 
 Z_BELOW_SURFACE_DICT = {
     "lettuce": 0.030,
-    "onions": 0.010,
+    "onions": 0.020,
 }
 ACTION_Z_MIN = -BIN_HEIGHT
 ACTION_Z_MAX = 0.02
@@ -70,7 +70,7 @@ ACTION_Z_MAX = 0.02
 # MEASURED EMPRICALLY
 MANIPULATION_CORRECTION_DICT = {
     2: {"X": 0.0, "Y": -0.013, "Z": 0.032},
-    5: {"X": 0.0, "Y": -0.010, "Z": 0.025},
+    5: {"X": 0.0, "Y": -0.010, "Z": 0.020},
 }
 
 END_EFFECTOR_RADIUS = 0.040
@@ -125,13 +125,13 @@ class ClassicalGraspGenerator(GraspGenerator):
 
         print("Depth min and max: ", np.min(depth_img), np.max(depth_img))
 
-        depth_img = cv2.medianBlur((depth_img).astype(np.uint8), 11)
+        depth_img = cv2.medianBlur((depth_img).astype(np.uint8), 21)
         # kernel_size = 30        
         # depth_img = cv2.blur(depth_img, (kernel_size, kernel_size))
 
-        cv2.imshow("Processed Depth", depth_img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # cv2.imshow("Processed Depth", depth_img)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
         # Take argmax over height
         anti_edge_padding = 20
@@ -144,9 +144,9 @@ class ClassicalGraspGenerator(GraspGenerator):
         # Visualize sampled point
         img_viz = depth_img.copy()
         cv2.circle(img_viz, (x_sampled_pix, y_sampled_pix), 5, (255, 0, 0), -1)
-        cv2.imshow("Blurred Depth", img_viz)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # cv2.imshow("Blurred Depth", img_viz)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
         # Get processed depth value at sampled pixel
         depth_wrt_cam = depth_img[y_sampled_pix, x_sampled_pix]
 
