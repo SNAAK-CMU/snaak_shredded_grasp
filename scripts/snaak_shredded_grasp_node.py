@@ -93,11 +93,13 @@ class ShreddedGraspServer(Node):
 
             if "lettuce" in ingredient_name.lower():
                 action_generator = self.action_generator_gg
+                ingredient_name_formatted = "lettuce"
             elif "onion" in ingredient_name.lower():
                 action_generator = self.action_generator_classical
+                ingredient_name_formatted = "onions"
 
             action = action_generator.get_action(
-                self.rgb_image, depth_image, weight, ingredient_name, pickup_weight, location_id
+                self.rgb_image, depth_image, weight, ingredient_name_formatted, pickup_weight, location_id
             )
             self.get_logger().info(f"Grasp action generated: {action}")
             

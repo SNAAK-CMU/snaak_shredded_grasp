@@ -36,6 +36,25 @@ Z_BELOW_SURFACE = 0.030
 
 GG_MODEL_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model.pth"
 
+BIN_DIMS_DICT = {
+    2: {
+        "width_m": BIN_WIDTH_M,
+        "length_m": BIN_LENGTH_M,
+        "height": BIN_HEIGHT,
+        "width_pix": 189,
+        "length_pix": 326,
+        "cam2bin_dist_mm": 320,
+    },
+    5: {
+        "width_m": BIN_WIDTH_M - 0.020,
+        "length_m": BIN_LENGTH_M - 0.020,
+        "height": BIN_HEIGHT,
+        "width_pix": 130,
+        "length_pix": 240,
+        "cam2bin_dist_mm": 305,  # Need to measure this
+    },
+}
+
 def rotate_image_clockwise(image, angle_deg):
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
@@ -333,7 +352,7 @@ class GranularGraspMethod(GraspGenerator):
         self.transform_depth = create_transform_depth()
 
         # Initialize coordinate converter
-        self.coord_converter = CoordConverter()
+        self.coord_converter = CoordConverter(BIN_DIMS_DICT[2])
 
     def __get_best_xy_for_weight(self, rgb_img, depth_img, w_desired):
         """
@@ -478,7 +497,7 @@ class GranularGraspMethod(GraspGenerator):
         cropped_depth = depth_img[CROP_YMIN:CROP_YMAX, CROP_XMIN:CROP_XMAX]  # For bin 2
 
         action_xpix, action_ypix = self.coord_converter.action_xy_to_pix(
-            x, y, cropped_depth.shape[1], cropped_depth.shape[0]
+            x, y
         )
 
         # Get depth at action point
