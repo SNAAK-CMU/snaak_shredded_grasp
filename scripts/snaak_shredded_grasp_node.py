@@ -15,6 +15,7 @@ from snaak_weight_read.srv import ReadWeight
 from snaak_shredded_grasp_utils import DefaultGraspGenerator
 from granular_grasp_utils import GranularGraspMethod, CoordConverter
 from classical_grasp_utils import ClassicalGraspGenerator
+from snaak_shredded_grasp_constants import  MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS
 
 # GRASP_TECHNIQUE = "GG"
 GRASP_TECHNIQUE = "CLASSICAL"
@@ -102,7 +103,7 @@ class ShreddedGraspServer(Node):
                 self.rgb_image, depth_image, weight, ingredient_name_formatted, pickup_weight, location_id
             )
             self.get_logger().info(f"Grasp action generated: {action}")
-            
+            action = np.clip(action, MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS)
             response.x = action[0]
             response.y = action[1]
             response.z = action[2]

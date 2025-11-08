@@ -43,19 +43,34 @@ BIN_DIMS_DICT = {
         "cam2bin_dist_mm": 305,  # Need to measure this
     },
 }
+
+# CROP_COORDS_DICT = {
+#     2: {
+#         "xmin": 274,
+#         "xmax": 463,
+#         "ymin": 0,
+#         "ymax": 326,
+#     },
+#     5: {  # After rotating the image anti-clockwise by 90 degrees
+#         "xmin": 136,
+#         "xmax": 266,
+#         "ymin": 458,
+#         "ymax": 698,
+#     },
+# }
 CROP_COORDS_DICT = {
     2: {
-        "xmin": 274,
-        "xmax": 463,
-        "ymin": 0,
-        "ymax": 326,
+        "xmin": 316,
+        "xmax": 413,
+        "ymin": 58,
+        "ymax": 278,
     },
-    5: {  # After rotating the image anti-clockwise by 90 degrees
-        "xmin": 136,
-        "xmax": 266,
-        "ymin": 458,
-        "ymax": 698,
-    },
+    5: {
+        "xmin": 168,
+        "xmax": 245,
+        "ymin": 483,
+        "ymax": 691,
+    }
 }
 
 #####################################################################################
