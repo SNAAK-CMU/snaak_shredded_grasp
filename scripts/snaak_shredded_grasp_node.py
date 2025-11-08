@@ -14,9 +14,11 @@ from snaak_shredded_grasp.srv import GetGraspPose
 from snaak_weight_read.srv import ReadWeight
 from snaak_shredded_grasp_utils import DefaultGraspGenerator
 from granular_grasp_utils import GranularGraspMethod, CoordConverter
+from classical_grasp_utils import ClassicalGraspGenerator
+from snaak_shredded_grasp_constants import  MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS
 
-
-GRASP_TECHNIQUE = "GG"
+# GRASP_TECHNIQUE = "GG"
+GRASP_TECHNIQUE = "CLASSICAL"
 
 
 class ShreddedGraspServer(Node):
@@ -49,12 +51,14 @@ class ShreddedGraspServer(Node):
         )
         self.depth_queue = collections.deque(maxlen=5)
 
-        if GRASP_TECHNIQUE == "GG":
-            self.action_generator = GranularGraspMethod()
-        elif GRASP_TECHNIQUE == "CLASSICAL":
-            pass
-        else:
-            self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
+        # if GRASP_TECHNIQUE == "GG":
+        #     self.action_generator = GranularGraspMethod()
+        # elif GRASP_TECHNIQUE == "CLASSICAL":
+        #     self.action_generator = ClassicalGraspGenerator()
+        # else:
+        #     self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
+        self.action_generator_gg = GranularGraspMethod()
+        self.action_generator_classical = ClassicalGraspGenerator()
         
         self.get_logger().info("Shredded Grasp Server is ready to receive requests.")
 
@@ -85,17 +89,21 @@ class ShreddedGraspServer(Node):
                 f"Received request for grasp pose. Location ID: {location_id}, Ingredient: {ingredient_name}"
             )
 
-            # TODO: this may not work
             depth_image = np.mean(self.depth_queue, axis=0).astype(np.float32)
             self.get_logger().info("Generating grasp action...")
-            action = self.action_generator.get_action(self.rgb_image, 
-                                                      depth_image, 
-                                                      weight, 
-                                                      ingredient_name, 
-                                                      pickup_weight, 
-                                                      location_id)
+
+            if "lettuce" in ingredient_name.lower():
+                action_generator = self.action_generator_gg
+                ingredient_name_formatted = "lettuce"
+            elif "onion" in ingredient_name.lower():
+                action_generator = self.action_generator_classical
+                ingredient_name_formatted = "onions"
+
+            action = action_generator.get_action(
+                self.rgb_image, depth_image, weight, ingredient_name_formatted, pickup_weight, location_id
+            )
             self.get_logger().info(f"Grasp action generated: {action}")
-            
+            action = np.clip(action, MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS)
             response.x = action[0]
             response.y = action[1]
             response.z = action[2]

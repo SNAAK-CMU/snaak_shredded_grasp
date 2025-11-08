@@ -25,6 +25,7 @@ install(PROGRAMS
   scripts/snaak_shredded_grasp_utils.py
   scripts/snaak_shredded_grasp_constants.py
   scripts/granular_grasp_utils.py
+  scripts/classical_grasp_utils.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
