@@ -15,7 +15,7 @@ from snaak_weight_read.srv import ReadWeight
 from snaak_shredded_grasp_utils import DefaultGraspGenerator
 from granular_grasp_utils import GranularGraspMethod, CoordConverter
 from classical_grasp_utils import ClassicalGraspGenerator
-from snaak_shredded_grasp_constants import  MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS
+from snaak_shredded_grasp_constants import MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS
 
 # GRASP_TECHNIQUE = "GG"
 GRASP_TECHNIQUE = "CLASSICAL"
@@ -57,12 +57,12 @@ class ShreddedGraspServer(Node):
         #     self.action_generator = ClassicalGraspGenerator()
         # else:
         #     self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
-        self.action_generator_gg = GranularGraspMethod()
+        self.action_generator_gg_lettuce = GranularGraspMethod("lettuce")
+        self.action_generator_gg_onions = GranularGraspMethod("onions")
         self.action_generator_classical = ClassicalGraspGenerator()
-        
+
         self.get_logger().info("Shredded Grasp Server is ready to receive requests.")
 
-        
     def get_grasp_pose_callback(self, request, response):
         try:
             location_id = request.location_id
@@ -79,11 +79,7 @@ class ShreddedGraspServer(Node):
                 raise Exception("No depth image data")
 
             # use dummy weight for now
-            weight = 0 # self.get_weight(location_id)
-
-            if weight is None:
-                self.get_logger().error("Failed to get weight")
-                raise Exception("Failed to get weight")
+            weight = 0.0
 
             self.get_logger().info(
                 f"Received request for grasp pose. Location ID: {location_id}, Ingredient: {ingredient_name}"
@@ -93,14 +89,19 @@ class ShreddedGraspServer(Node):
             self.get_logger().info("Generating grasp action...")
 
             if "lettuce" in ingredient_name.lower():
-                action_generator = self.action_generator_gg
+                action_generator = self.action_generator_gg_lettuce
                 ingredient_name_formatted = "lettuce"
             elif "onion" in ingredient_name.lower():
-                action_generator = self.action_generator_classical
+                action_generator = self.action_generator_gg_onions
                 ingredient_name_formatted = "onions"
 
             action = action_generator.get_action(
-                self.rgb_image, depth_image, weight, ingredient_name_formatted, pickup_weight, location_id
+                self.rgb_image,
+                depth_image,
+                weight,
+                ingredient_name_formatted,
+                pickup_weight,
+                location_id,
             )
             self.get_logger().info(f"Grasp action generated: {action}")
             action = np.clip(action, MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS)
@@ -142,26 +143,8 @@ class ShreddedGraspServer(Node):
             )
             self.rgb_image = None
 
-    # TODO: debug why this is hanging
-    # def get_weight(self, location_id):
-    #     if (location_id == 1 or location_id == 2 or location_id == 3):
-    #         client = self._get_weight_right_bins
-    #     else:
-    #         client = self._get_weight_left_bins
 
-    #     request = ReadWeight.Request()
-
-    #     future = client.call_async(request)
-
-    #     rclpy.spin_until_future_complete(self, future)
-
-    #     if future.result() is not None:
-    #         return future.result().weight
-    #     else:
-    #         self.get_logger().error("Failed to read weight")
-    #         return None
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     rclpy.init()
     try:
         node = ShreddedGraspServer()
