@@ -17,7 +17,7 @@ WINDOW_SIZE = 50  # (pixels) The model architecture depends on this!
 BIN_PADDING = 50
 
 MODEL_PATH_DICT = {
-    "lettuce": "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model.pth",
+    "lettuce": "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model_lettuce.pth",
     "onions": "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model_onions.pth",
 }
 
@@ -512,7 +512,7 @@ class GranularGraspMethod(GraspGenerator):
             patch_ymax = min(cropped_depth.shape[0], action_ypix + patch_size // 2)
             depth_wrt_cam = np.mean(
                 cropped_depth[patch_ymin:patch_ymax, patch_xmin:patch_xmax]
-            ) # mm
+            )  # mm
 
         action_z = cam2bin_dist_mm - depth_wrt_cam
 
