@@ -299,6 +299,7 @@ class GranularGraspMethod(GraspGenerator):
             device: Device to run inference on (cuda/cpu)
         """
         self.ingredient_name = ingredient_name
+        self.pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
         model_path = MODEL_PATH_DICT[self.ingredient_name]
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -310,14 +311,13 @@ class GranularGraspMethod(GraspGenerator):
         self.model.to(self.device)
 
         # Initialize transforms
-        pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
         self.transform_rgb = create_transform_rgb()
         self.transform_depth = create_transform_depth(
-            BIN_DIMS_DICT[pick_bin_id]["cam2bin_dist_mm"]
+            BIN_DIMS_DICT[self.pick_bin_id]["cam2bin_dist_mm"]
         )
 
         # Initialize coordinate converter
-        self.coord_converter = CoordConverter(BIN_DIMS_DICT[pick_bin_id])
+        self.coord_converter = CoordConverter(BIN_DIMS_DICT[self.pick_bin_id])
 
     def __get_best_xy_for_weight(self, rgb_img, depth_img, w_desired):
         """
@@ -364,10 +364,10 @@ class GranularGraspMethod(GraspGenerator):
             rgb_img: RGB image (numpy array)
             depth_img: Depth image (numpy array)
         """
-        crop_ymin = CROP_COORDS_DICT[self.ingredient_name]["ymin"]
-        crop_ymax = CROP_COORDS_DICT[self.ingredient_name]["ymax"]
-        crop_xmin = CROP_COORDS_DICT[self.ingredient_name]["xmin"]
-        crop_xmax = CROP_COORDS_DICT[self.ingredient_name]["xmax"]
+        crop_ymin = CROP_COORDS_DICT[self.pick_bin_id]["ymin"]
+        crop_ymax = CROP_COORDS_DICT[self.pick_bin_id]["ymax"]
+        crop_xmin = CROP_COORDS_DICT[self.pick_bin_id]["xmin"]
+        crop_xmax = CROP_COORDS_DICT[self.pick_bin_id]["xmax"]
         rgb_img = rgb_img[crop_ymin:crop_ymax, crop_xmin:crop_xmax, :]
         depth_img = depth_img[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
 
@@ -427,8 +427,7 @@ class GranularGraspMethod(GraspGenerator):
         - depth_img shape: (BIN_LENGTH_PIX, BIN_WIDTH_PIX), dtype=float32 or uint16.
         """
 
-        pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
-        bin_dims_dict = BIN_DIMS_DICT[pick_bin_id]
+        bin_dims_dict = BIN_DIMS_DICT[self.pick_bin_id]
         bin_length_pix = bin_dims_dict["length_pix"]
         bin_width_pix = bin_dims_dict["width_pix"]
 
@@ -487,13 +486,12 @@ class GranularGraspMethod(GraspGenerator):
             depth_img = cv2.rotate(depth_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
             depth_img = rotate_image_clockwise(depth_img, 2.5)
 
-        pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
-        crop_coords_dict = CROP_COORDS_DICT[pick_bin_id]
+        crop_coords_dict = CROP_COORDS_DICT[self.pick_bin_id]
         crop_ymin = crop_coords_dict["ymin"]
         crop_ymax = crop_coords_dict["ymax"]
         crop_xmin = crop_coords_dict["xmin"]
         crop_xmax = crop_coords_dict["xmax"]
-        cam2bin_dist_mm = BIN_DIMS_DICT[pick_bin_id]["cam2bin_dist_mm"]
+        cam2bin_dist_mm = BIN_DIMS_DICT[self.pick_bin_id]["cam2bin_dist_mm"]
         z_below_surface = Z_BELOW_SURFACE_DICT[self.ingredient_name]
 
         # TODO: Implement depth extraction logic
