@@ -16,16 +16,14 @@ WINDOW_SIZE = 50  # (pixels) The model architecture depends on this!
 
 BIN_PADDING = 50
 
-ACTION_Z_MIN = -BIN_HEIGHT
-ACTION_Z_MAX = 0.02
-Z_BELOW_SURFACE_DICT = {
-    "lettuce": 0.030,
-    "onions": 0.015,
-}
-
 MODEL_PATH_DICT = {
     "lettuce": "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model.pth",
     "onions": "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model_onions.pth",
+}
+
+INGREDIENT2BIN_DICT = {
+    "lettuce": {"pick_id": 2, "place_id": 5},
+    "onions": {"pick_id": 5, "place_id": 2},
 }
 
 # Bin dimensions
@@ -64,6 +62,13 @@ CROP_COORDS_DICT = {
         "ymin": 458,
         "ymax": 698,
     },
+}
+
+ACTION_Z_MIN = -BIN_HEIGHT
+ACTION_Z_MAX = 0.02
+Z_BELOW_SURFACE_DICT = {
+    "lettuce": 0.030,
+    "onions": 0.015,
 }
 
 
@@ -146,58 +151,6 @@ def create_transform_depth(cam2bin_dist_mm, bin_height_m=0.065):
     ]
     transform = T.Compose(transform_list)
     return transform
-
-
-def get_patches_from_image_and_depth_maps(
-    rgb_img, depth_img, n_patch_length=7, n_patch_width=5, bin_padding=50
-):
-    """
-    Sample 7 points along the bin's length (x axis) and 5 points along the width (y axis),
-    equally spaced. Extract centered patches around each point.
-    """
-    assert rgb_img.shape == (
-        BIN_LENGTH_PIX,
-        BIN_WIDTH_PIX,
-        3,
-    ), f"RGB image shape is incorrect: {rgb_img.shape}"
-    assert depth_img.shape == (
-        BIN_LENGTH_PIX,
-        BIN_WIDTH_PIX,
-    ), f"Depth image shape is incorrect: {depth_img.shape}"
-    assert (
-        rgb_img.shape[0:2] == depth_img.shape[0:2]
-    ), "RGB and depth image shapes do not match"
-
-    # Compute coordinates for patch centers (y, x)
-    padding = bin_padding
-    x_vals = np.linspace(padding, BIN_WIDTH_PIX - padding, n_patch_width)
-    y_vals = np.linspace(padding, BIN_LENGTH_PIX - padding, n_patch_length)
-
-    # Convert to int and clamp within safe valid range
-    x_vals = np.round(x_vals).astype(int)
-    y_vals = np.round(y_vals).astype(int)
-
-    patches_rgb = []
-    patches_depth = []
-    centers = []
-
-    for y in y_vals:
-        centers_row = []
-        patches_rgb_row = []
-        patches_depth_row = []
-        for x in x_vals:
-            top = y - WINDOW_SIZE // 2
-            left = x - WINDOW_SIZE // 2
-            rgb_patch = rgb_img[top : top + WINDOW_SIZE, left : left + WINDOW_SIZE, :]
-            depth_patch = depth_img[top : top + WINDOW_SIZE, left : left + WINDOW_SIZE]
-            patches_rgb_row.append(rgb_patch)
-            patches_depth_row.append(depth_patch)
-            centers_row.append((x, y))
-        centers.append(centers_row)
-        patches_rgb.append(patches_rgb_row)
-        patches_depth.append(patches_depth_row)
-
-    return patches_rgb, patches_depth, centers
 
 
 def calculate_loss(row_i, col_i, w_desired, pred_weights, lambda_neighbor=0.25):
@@ -357,13 +310,13 @@ class GranularGraspMethod(GraspGenerator):
         self.model.to(self.device)
 
         # Initialize transforms
+        pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
         self.transform_rgb = create_transform_rgb()
         self.transform_depth = create_transform_depth(
-            BIN_DIMS_DICT[self.ingredient_name]["cam2bin_dist_mm"]
+            BIN_DIMS_DICT[pick_bin_id]["cam2bin_dist_mm"]
         )
 
         # Initialize coordinate converter
-        pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
         self.coord_converter = CoordConverter(BIN_DIMS_DICT[pick_bin_id])
 
     def __get_best_xy_for_weight(self, rgb_img, depth_img, w_desired):
@@ -549,7 +502,7 @@ class GranularGraspMethod(GraspGenerator):
         action_xpix, action_ypix = self.coord_converter.action_xy_to_pix(x, y)
 
         # Get depth at action point
-        if self.ingredient_name = "lettuce":
+        if self.ingredient_name == "lettuce":
             depth_wrt_cam = cropped_depth[action_ypix, action_xpix]  # mm
         elif self.ingredient_name == "onions":
             patch_size = 30
