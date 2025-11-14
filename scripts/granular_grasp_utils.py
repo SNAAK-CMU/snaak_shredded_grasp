@@ -14,28 +14,22 @@ from snaak_shredded_grasp_utils import GraspGenerator
 # Constants copied from data_utils.py
 WINDOW_SIZE = 50  # (pixels) The model architecture depends on this!
 
+BIN_PADDING = 50
+
+MODEL_PATH_DICT = {
+    "lettuce": "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model_lettuce.pth",
+    "onions": "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model_onions.pth",
+}
+
+INGREDIENT2BIN_DICT = {
+    "lettuce": {"pick_id": 2, "place_id": 5},
+    "onions": {"pick_id": 5, "place_id": 2},
+}
+
 # Bin dimensions
 BIN_WIDTH_M = 0.140
 BIN_LENGTH_M = 0.240
 BIN_HEIGHT = 0.065
-BIN_WIDTH_PIX = 189
-BIN_LENGTH_PIX = 326
-CAM2BIN_DIST_MM = 320
-
-# For cropping the bin from rgb and depth image
-CROP_XMIN = 274
-CROP_XMAX = 463
-CROP_YMIN = 0
-CROP_YMAX = 326
-
-BIN_PADDING = 50
-
-ACTION_Z_MIN = -BIN_HEIGHT
-ACTION_Z_MAX = 0.02
-Z_BELOW_SURFACE = 0.030
-
-GG_MODEL_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_shredded_grasp/models/mass_estimation_model.pth"
-
 BIN_DIMS_DICT = {
     2: {
         "width_m": BIN_WIDTH_M,
@@ -55,6 +49,34 @@ BIN_DIMS_DICT = {
     },
 }
 
+CROP_COORDS_DICT = {
+    2: {
+        "xmin": 274,
+        "xmax": 463,
+        "ymin": 0,
+        "ymax": 326,
+    },
+    5: {  # After rotating the image anti-clockwise by 90 degrees
+        "xmin": 136,
+        "xmax": 266,
+        "ymin": 458,
+        "ymax": 698,
+    },
+}
+
+ACTION_Z_MIN = -BIN_HEIGHT
+ACTION_Z_MAX = 0.02
+Z_BELOW_SURFACE_DICT = {
+    "lettuce": 0.025,
+    "onions": 0.015,
+}
+
+MANIPULATION_CORRECTION_DICT = {
+    2: {"X": 0.0, "Y": -0.005, "Z": 0.015},
+    5: {"X": 0.0, "Y": -0.015, "Z": 0.015},
+}
+
+
 def rotate_image_clockwise(image, angle_deg):
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
@@ -72,6 +94,7 @@ def rotate_image_clockwise(image, angle_deg):
         borderValue=border_value,
     )
     return rotated
+
 
 class CoordConverter:
     def __init__(
@@ -123,69 +146,16 @@ def create_transform_rgb():
     return transform
 
 
-def create_transform_depth():
-    """Create depth transformation pipeline"""
+def create_transform_depth(cam2bin_dist_mm, bin_height_m=0.065):
     transform_list = [
         T.ToTensor(),
-        T.Lambda(lambda x: x - (CAM2BIN_DIST_MM - 20)),
+        T.Lambda(lambda x: x - (cam2bin_dist_mm - 20)),
         T.Lambda(
-            lambda x: torch.where(x < 0, torch.tensor(BIN_HEIGHT * 1000), x)
+            lambda x: torch.where(x < 0, torch.tensor(bin_height_m * 1000) + 20, x)
         ),  # Replace negative values with depth to bin bottom
     ]
     transform = T.Compose(transform_list)
     return transform
-
-
-def get_patches_from_image_and_depth_maps(
-    rgb_img, depth_img, n_patch_length=7, n_patch_width=5, bin_padding=50
-):
-    """
-    Sample 7 points along the bin's length (x axis) and 5 points along the width (y axis),
-    equally spaced. Extract centered patches around each point.
-    """
-    assert rgb_img.shape == (
-        BIN_LENGTH_PIX,
-        BIN_WIDTH_PIX,
-        3,
-    ), f"RGB image shape is incorrect: {rgb_img.shape}"
-    assert depth_img.shape == (
-        BIN_LENGTH_PIX,
-        BIN_WIDTH_PIX,
-    ), f"Depth image shape is incorrect: {depth_img.shape}"
-    assert (
-        rgb_img.shape[0:2] == depth_img.shape[0:2]
-    ), "RGB and depth image shapes do not match"
-
-    # Compute coordinates for patch centers (y, x)
-    padding = bin_padding
-    x_vals = np.linspace(padding, BIN_WIDTH_PIX - padding, n_patch_width)
-    y_vals = np.linspace(padding, BIN_LENGTH_PIX - padding, n_patch_length)
-
-    # Convert to int and clamp within safe valid range
-    x_vals = np.round(x_vals).astype(int)
-    y_vals = np.round(y_vals).astype(int)
-
-    patches_rgb = []
-    patches_depth = []
-    centers = []
-
-    for y in y_vals:
-        centers_row = []
-        patches_rgb_row = []
-        patches_depth_row = []
-        for x in x_vals:
-            top = y - WINDOW_SIZE // 2
-            left = x - WINDOW_SIZE // 2
-            rgb_patch = rgb_img[top : top + WINDOW_SIZE, left : left + WINDOW_SIZE, :]
-            depth_patch = depth_img[top : top + WINDOW_SIZE, left : left + WINDOW_SIZE]
-            patches_rgb_row.append(rgb_patch)
-            patches_depth_row.append(depth_patch)
-            centers_row.append((x, y))
-        centers.append(centers_row)
-        patches_rgb.append(patches_rgb_row)
-        patches_depth.append(patches_depth_row)
-
-    return patches_rgb, patches_depth, centers
 
 
 def calculate_loss(row_i, col_i, w_desired, pred_weights, lambda_neighbor=0.25):
@@ -325,7 +295,7 @@ class GranularGraspMethod(GraspGenerator):
     for a desired weight given RGB and depth images.
     """
 
-    def __init__(self, model_path=None, device=None):
+    def __init__(self, ingredient_name):
         """
         Initialize the neural network with a trained model.
 
@@ -333,13 +303,12 @@ class GranularGraspMethod(GraspGenerator):
             model_path: Path to the trained model checkpoint
             device: Device to run inference on (cuda/cpu)
         """
-        if model_path is None:
-            model_path = GG_MODEL_PATH
+        self.ingredient_name = ingredient_name
+        self.pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
+        model_path = MODEL_PATH_DICT[self.ingredient_name]
+        self.correction_dict = MANIPULATION_CORRECTION_DICT[self.pick_bin_id]
 
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = device
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Load the model
         self.model = MassEstimationModel()
@@ -349,10 +318,12 @@ class GranularGraspMethod(GraspGenerator):
 
         # Initialize transforms
         self.transform_rgb = create_transform_rgb()
-        self.transform_depth = create_transform_depth()
+        self.transform_depth = create_transform_depth(
+            BIN_DIMS_DICT[self.pick_bin_id]["cam2bin_dist_mm"]
+        )
 
         # Initialize coordinate converter
-        self.coord_converter = CoordConverter(BIN_DIMS_DICT[2])
+        self.coord_converter = CoordConverter(BIN_DIMS_DICT[self.pick_bin_id])
 
     def __get_best_xy_for_weight(self, rgb_img, depth_img, w_desired):
         """
@@ -366,6 +337,12 @@ class GranularGraspMethod(GraspGenerator):
         Returns:
             tuple: (best_x, best_y) coordinates in meters
         """
+
+        if self.ingredient_name == "onions":
+            rgb_img = cv2.rotate(rgb_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            rgb_img = rotate_image_clockwise(rgb_img, 2.5)
+            depth_img = cv2.rotate(depth_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            depth_img = rotate_image_clockwise(depth_img, 2.5)
 
         centers, pred_weights = self.__infer_on_bin(
             rgb_img,
@@ -393,13 +370,21 @@ class GranularGraspMethod(GraspGenerator):
             rgb_img: RGB image (numpy array)
             depth_img: Depth image (numpy array)
         """
-        rgb_img = rgb_img[CROP_YMIN:CROP_YMAX, CROP_XMIN:CROP_XMAX, :]
-        depth_img = depth_img[CROP_YMIN:CROP_YMAX, CROP_XMIN:CROP_XMAX]
+        crop_ymin = CROP_COORDS_DICT[self.pick_bin_id]["ymin"]
+        crop_ymax = CROP_COORDS_DICT[self.pick_bin_id]["ymax"]
+        crop_xmin = CROP_COORDS_DICT[self.pick_bin_id]["xmin"]
+        crop_xmax = CROP_COORDS_DICT[self.pick_bin_id]["xmax"]
+        rgb_img = rgb_img[crop_ymin:crop_ymax, crop_xmin:crop_xmax, :]
+        depth_img = depth_img[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
 
         # Get patches from the image and depth maps
+        if self.ingredient_name == "onions":
+            bin_padding = WINDOW_SIZE // 2
+        else:
+            bin_padding = BIN_PADDING
         patches_rgb, patches_depth, centers = (
             self.__get_patches_from_image_and_depth_maps(
-                rgb_img, depth_img, bin_padding=BIN_PADDING
+                rgb_img, depth_img, bin_padding=bin_padding
             )
         )
 
@@ -432,7 +417,12 @@ class GranularGraspMethod(GraspGenerator):
         return centers, pred_weights
 
     def __get_patches_from_image_and_depth_maps(
-        self, rgb_img, depth_img, n_patch_length=7, n_patch_width=5, bin_padding=50
+        self,
+        rgb_img,
+        depth_img,
+        bin_padding,
+        n_patch_length=7,
+        n_patch_width=5,
     ):
         """
         Sample n_patch_length points along the bin's length (x axis) and n_patch_width points along the width (y axis),
@@ -443,14 +433,18 @@ class GranularGraspMethod(GraspGenerator):
         - depth_img shape: (BIN_LENGTH_PIX, BIN_WIDTH_PIX), dtype=float32 or uint16.
         """
 
+        bin_dims_dict = BIN_DIMS_DICT[self.pick_bin_id]
+        bin_length_pix = bin_dims_dict["length_pix"]
+        bin_width_pix = bin_dims_dict["width_pix"]
+
         assert rgb_img.shape == (
-            BIN_LENGTH_PIX,
-            BIN_WIDTH_PIX,
+            bin_length_pix,
+            bin_width_pix,
             3,
         ), f"RGB image shape is incorrect: {rgb_img.shape}"
         assert depth_img.shape == (
-            BIN_LENGTH_PIX,
-            BIN_WIDTH_PIX,
+            bin_length_pix,
+            bin_width_pix,
         ), f"Depth image shape is incorrect: {depth_img.shape}"
         assert (
             rgb_img.shape[0:2] == depth_img.shape[0:2]
@@ -459,8 +453,8 @@ class GranularGraspMethod(GraspGenerator):
         # Compute coordinates for patch centers (y, x)
         # Length = rows (Y), Width = columns (X) in image patch
         padding = bin_padding
-        x_vals = np.linspace(padding, BIN_WIDTH_PIX - padding, n_patch_width)
-        y_vals = np.linspace(padding, BIN_LENGTH_PIX - padding, n_patch_length)
+        x_vals = np.linspace(padding, bin_width_pix - padding, n_patch_width)
+        y_vals = np.linspace(padding, bin_length_pix - padding, n_patch_length)
 
         # Convert to int and clamp within safe valid range
         x_vals = np.round(x_vals).astype(int)
@@ -493,26 +487,54 @@ class GranularGraspMethod(GraspGenerator):
         return patches_rgb, patches_depth, centers
 
     def __get_z_from_depth(self, x, y, depth_img):
-        # TODO: Implement depth extraction logic
-        cropped_depth = depth_img[CROP_YMIN:CROP_YMAX, CROP_XMIN:CROP_XMAX]  # For bin 2
 
-        action_xpix, action_ypix = self.coord_converter.action_xy_to_pix(
-            x, y
-        )
+        if self.ingredient_name == "onions":
+            depth_img = cv2.rotate(depth_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            depth_img = rotate_image_clockwise(depth_img, 2.5)
+
+        crop_coords_dict = CROP_COORDS_DICT[self.pick_bin_id]
+        crop_ymin = crop_coords_dict["ymin"]
+        crop_ymax = crop_coords_dict["ymax"]
+        crop_xmin = crop_coords_dict["xmin"]
+        crop_xmax = crop_coords_dict["xmax"]
+        cam2bin_dist_mm = BIN_DIMS_DICT[self.pick_bin_id]["cam2bin_dist_mm"]
+        z_below_surface = Z_BELOW_SURFACE_DICT[self.ingredient_name]
+
+        # TODO: Implement depth extraction logic
+        cropped_depth = depth_img[crop_ymin:crop_ymax, crop_xmin:crop_xmax]  # For bin 2
+
+        action_xpix, action_ypix = self.coord_converter.action_xy_to_pix(x, y)
 
         # Get depth at action point
-        depth_wrt_cam = cropped_depth[action_ypix, action_xpix]  # mm
-        action_z = CAM2BIN_DIST_MM - depth_wrt_cam
+        if self.ingredient_name == "lettuce":
+            depth_wrt_cam = cropped_depth[action_ypix, action_xpix]  # mm
+        elif self.ingredient_name == "onions":
+            patch_size = 30
+            patch_xmin = max(0, action_xpix - patch_size // 2)
+            patch_xmax = min(cropped_depth.shape[1], action_xpix + patch_size // 2)
+            patch_ymin = max(0, action_ypix - patch_size // 2)
+            patch_ymax = min(cropped_depth.shape[0], action_ypix + patch_size // 2)
+            depth_wrt_cam = np.mean(
+                cropped_depth[patch_ymin:patch_ymax, patch_xmin:patch_xmax]
+            )  # mm
+
+        action_z = cam2bin_dist_mm - depth_wrt_cam
 
         # Convert mm to m
         action_z /= 1000.0
 
-        action_z -= Z_BELOW_SURFACE  # Go deeper than the surface of lettuce
+        action_z -= z_below_surface  # Go deeper than the surface of lettuce
 
         if not (ACTION_Z_MIN <= action_z <= ACTION_Z_MAX):
             action_z = np.clip(action_z, ACTION_Z_MIN, ACTION_Z_MAX)
 
         return action_z
+
+    def __apply_correction(self, action):
+        x_corrected = action[0] + self.correction_dict["X"]
+        y_corrected = action[1] + self.correction_dict["Y"]
+        z_corrected = action[2] + self.correction_dict["Z"]
+        return x_corrected, y_corrected, z_corrected
 
     def get_action(
         self,
@@ -536,6 +558,10 @@ class GranularGraspMethod(GraspGenerator):
         Returns:
             tuple: (action_x, action_y, action_z) in bin coordinate frame
         """
+        assert (
+            ingredient_name == self.ingredient_name
+        ), "Ingredient name does not match with initialized ingredient name"
+
         best_x_pix, best_y_pix = self.__get_best_xy_for_weight(
             rgb_img, depth_img, w_desired
         )
@@ -546,4 +572,7 @@ class GranularGraspMethod(GraspGenerator):
         action_z = self.__get_z_from_depth(action_x, action_y, depth_img)
 
         action = (float(action_x), float(action_y), float(action_z))
+
+        action = self.__apply_correction(action)
+
         return action
