@@ -12,14 +12,12 @@ from cv_bridge import CvBridge, CvBridgeError
 
 from snaak_shredded_grasp.srv import GetGraspPose
 from snaak_weight_read.srv import ReadWeight
-from snaak_shredded_grasp_utils import DefaultGraspGenerator
-from granular_grasp_utils import GranularGraspMethod, CoordConverter
+from granular_grasp_utils import GranularGraspMethod
 from classical_grasp_utils import ClassicalGraspGenerator
 from snaak_shredded_grasp_constants import MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS
 
-# GRASP_TECHNIQUE = "GG"
-GRASP_TECHNIQUE = "CLASSICAL"
-
+GRASP_TECHNIQUE_LETTUCE = "GG"
+GRASP_TECHNIQUE_ONIONS = "GG"
 
 class ShreddedGraspServer(Node):
     def __init__(self):
@@ -51,15 +49,23 @@ class ShreddedGraspServer(Node):
         )
         self.depth_queue = collections.deque(maxlen=5)
 
-        # if GRASP_TECHNIQUE == "GG":
-        #     self.action_generator = GranularGraspMethod()
-        # elif GRASP_TECHNIQUE == "CLASSICAL":
-        #     self.action_generator = ClassicalGraspGenerator()
-        # else:
-        #     self.action_generator = DefaultGraspGenerator() # this is a dummy for testing
         self.action_generator_gg_lettuce = GranularGraspMethod("lettuce")
         self.action_generator_gg_onions = GranularGraspMethod("onions")
         self.action_generator_classical = ClassicalGraspGenerator()
+        self.action_generator_lettuce = None
+        self.action_generator_onions = None
+
+        # Set the lettuce action generator
+        if GRASP_TECHNIQUE_LETTUCE == "GG":
+            self.action_generator_lettuce = self.action_generator_gg_lettuce
+        else:
+            self.action_generator_lettuce = self.action_generator_classical
+
+        # Set the onions action generator
+        if GRASP_TECHNIQUE_ONIONS == "GG":
+            self.action_generator_onions = self.action_generator_gg_onions
+        else:
+            self.action_generator_onions = self.action_generator_classical
 
         self.get_logger().info("Shredded Grasp Server is ready to receive requests.")
 
@@ -89,10 +95,10 @@ class ShreddedGraspServer(Node):
             self.get_logger().info("Generating grasp action...")
 
             if "lettuce" in ingredient_name.lower():
-                action_generator = self.action_generator_gg_lettuce
+                action_generator = self.action_generator_lettuce
                 ingredient_name_formatted = "lettuce"
             elif "onion" in ingredient_name.lower():
-                action_generator = self.action_generator_gg_onions
+                action_generator = self.action_generator_onions
                 ingredient_name_formatted = "onions"
 
             action = action_generator.get_action(
@@ -105,6 +111,7 @@ class ShreddedGraspServer(Node):
             )
             self.get_logger().info(f"Grasp action generated: {action}")
             action = np.clip(action, MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS)
+
             response.x = action[0]
             response.y = action[1]
             response.z = action[2]

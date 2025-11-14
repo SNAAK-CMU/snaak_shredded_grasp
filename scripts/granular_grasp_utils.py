@@ -71,6 +71,11 @@ Z_BELOW_SURFACE_DICT = {
     "onions": 0.015,
 }
 
+MANIPULATION_CORRECTION_DICT = {
+    2: {"X": 0.0, "Y": -0.005, "Z": 0.015},
+    5: {"X": 0.0, "Y": -0.015, "Z": 0.015},
+}
+
 
 def rotate_image_clockwise(image, angle_deg):
     (h, w) = image.shape[:2]
@@ -301,6 +306,7 @@ class GranularGraspMethod(GraspGenerator):
         self.ingredient_name = ingredient_name
         self.pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
         model_path = MODEL_PATH_DICT[self.ingredient_name]
+        self.correction_dict = MANIPULATION_CORRECTION_DICT[self.pick_bin_id]
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -524,6 +530,12 @@ class GranularGraspMethod(GraspGenerator):
 
         return action_z
 
+    def __apply_correction(self, action):
+        x_corrected = action[0] + self.correction_dict["X"]
+        y_corrected = action[1] + self.correction_dict["Y"]
+        z_corrected = action[2] + self.correction_dict["Z"]
+        return x_corrected, y_corrected, z_corrected
+
     def get_action(
         self,
         rgb_img,
@@ -560,4 +572,7 @@ class GranularGraspMethod(GraspGenerator):
         action_z = self.__get_z_from_depth(action_x, action_y, depth_img)
 
         action = (float(action_x), float(action_y), float(action_z))
+
+        action = self.__apply_correction(action)
+
         return action
