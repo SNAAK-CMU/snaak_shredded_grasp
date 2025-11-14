@@ -67,7 +67,7 @@ CROP_COORDS_DICT = {
 ACTION_Z_MIN = -BIN_HEIGHT
 ACTION_Z_MAX = 0.02
 Z_BELOW_SURFACE_DICT = {
-    "lettuce": 0.030,
+    "lettuce": 0.025,
     "onions": 0.015,
 }
 
