@@ -75,17 +75,19 @@ CROP_COORDS_DICT = {
 
 #####################################################################################
 
-Z_BELOW_SURFACE_DICT = {
-    "lettuce": 0.030,
-    "onions": 0.020,
-}
 ACTION_Z_MIN = -BIN_HEIGHT
 ACTION_Z_MAX = 0.02
 
+Z_BELOW_SURFACE_DICT = {
+    "lettuce": 0.025,
+    "onions": 0.015,
+}
+
+
 # MEASURED EMPRICALLY
 MANIPULATION_CORRECTION_DICT = {
-    2: {"X": 0.0, "Y": -0.013, "Z": 0.032},
-    5: {"X": 0.0, "Y": -0.010, "Z": 0.020},
+    2: {"X": 0.0, "Y": -0.005, "Z": 0.015},
+    5: {"X": 0.0, "Y": -0.015, "Z": 0.015},
 }
 
 END_EFFECTOR_RADIUS = 0.040
