@@ -1,5 +1,6 @@
 import glob
 import os
+from unittest.mock import patch
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -70,7 +71,7 @@ ACTION_Z_MIN = -BIN_HEIGHT
 ACTION_Z_MAX = 0.02
 Z_BELOW_SURFACE_DICT = {
     "lettuce": 0.025,
-    "onions": 0.015,
+    "onions": 0.020,
 }
 
 MANIPULATION_CORRECTION_DICT = {
@@ -490,9 +491,18 @@ class GranularGraspMethod(GraspGenerator):
         return patches_rgb, patches_depth, centers
 
     def __get_z_from_depth_onions(self, x_pix, y_pix, depth_img):
-        depth_flat = depth_img.flatten()
+        print("Getting z from depth for onions...")
+        
+        window_size = 50
+        patch_xmin = max(0, x_pix - window_size // 2)
+        patch_xmax = min(depth_img.shape[1], x_pix + window_size // 2)
+        patch_ymin = max(0, y_pix - window_size // 2)
+        patch_ymax = min(depth_img.shape[0], y_pix + window_size // 2)
+        depth_patch = depth_img[patch_ymin:patch_ymax, patch_xmin:patch_xmax]
+        depth_flat = depth_patch.flatten()
 
         median_depth = np.median(depth_flat)
+        print(f"Median depth: {median_depth}")
 
         kde = gaussian_kde(depth_flat)
 
@@ -513,9 +523,10 @@ class GranularGraspMethod(GraspGenerator):
             if rightmost_peak_x < median_depth:
                 depth_wrt_cam = median_depth
             else:
-                step_size = 10
+                step_size = 10  # mm
                 depth_wrt_cam = min(rightmost_peak_x, median_depth + step_size)
 
+            print(f"Selected depth from peaks: {depth_wrt_cam}")
             return depth_wrt_cam
         else:  # Revert to median sampling if no peaks are found
             patch_size = 30
