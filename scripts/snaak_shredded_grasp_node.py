@@ -112,6 +112,11 @@ class ShreddedGraspServer(Node):
             self.get_logger().info(f"Grasp action generated: {action}")
             action = np.clip(action, MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS)
 
+
+            # If picking onions, clip the y action to be 5 mm less from the max
+            if ingredient_name_formatted == "onions":
+                action[1] = min(action[1], MAX_CLAMP_BOUNDS[1] - 0.005)
+
             response.x = action[0]
             response.y = action[1]
             response.z = action[2]
