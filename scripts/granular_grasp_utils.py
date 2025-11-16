@@ -8,6 +8,8 @@ from torch.utils.data import Dataset
 import torch.nn.functional as F
 import torchvision.transforms as T
 import torch.nn as nn
+from scipy.stats import gaussian_kde
+from scipy.signal import find_peaks
 
 from snaak_shredded_grasp_utils import GraspGenerator
 
@@ -307,6 +309,7 @@ class GranularGraspMethod(GraspGenerator):
         self.pick_bin_id = INGREDIENT2BIN_DICT[self.ingredient_name]["pick_id"]
         model_path = MODEL_PATH_DICT[self.ingredient_name]
         self.correction_dict = MANIPULATION_CORRECTION_DICT[self.pick_bin_id]
+        self.cam2bin_dist_mm = BIN_DIMS_DICT[self.pick_bin_id]["cam2bin_dist_mm"]
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -486,6 +489,45 @@ class GranularGraspMethod(GraspGenerator):
 
         return patches_rgb, patches_depth, centers
 
+    def __get_z_from_depth_onions(self, x_pix, y_pix, depth_img):
+        depth_flat = depth_img.flatten()
+
+        median_depth = np.median(depth_flat)
+
+        kde = gaussian_kde(depth_flat)
+
+        bin_depth_mm = BIN_DIMS_DICT[self.pick_bin_id]["height"] * 1000
+        x_grid = np.linspace(
+            self.cam2bin_dist_mm - 20, self.cam2bin_dist_mm + bin_depth_mm, 500
+        )
+        kde_vals = kde(x_grid)
+
+        peaks, _ = find_peaks(kde_vals, prominence=0.05 * np.max(kde_vals))
+
+        if len(peaks) > 0:
+            # Find the peak with the largest x value (i.e., the right-most peak)
+            rightmost_peak_idx = peaks[np.argmax(x_grid[peaks])]
+            rightmost_peak_x = x_grid[rightmost_peak_idx]
+
+            # Find the final pick up point
+            if rightmost_peak_x < median_depth:
+                depth_wrt_cam = median_depth
+            else:
+                step_size = 10
+                depth_wrt_cam = min(rightmost_peak_x, median_depth + step_size)
+
+            return depth_wrt_cam
+        else:  # Revert to median sampling if no peaks are found
+            patch_size = 30
+            patch_xmin = max(0, x_pix - patch_size // 2)
+            patch_xmax = min(depth_img.shape[1], x_pix + patch_size // 2)
+            patch_ymin = max(0, y_pix - patch_size // 2)
+            patch_ymax = min(depth_img.shape[0], y_pix + patch_size // 2)
+            depth_wrt_cam = np.median(
+                depth_img[patch_ymin:patch_ymax, patch_xmin:patch_xmax]
+            )  # mm
+            return depth_wrt_cam
+
     def __get_z_from_depth(self, x, y, depth_img):
 
         if self.ingredient_name == "onions":
@@ -509,14 +551,9 @@ class GranularGraspMethod(GraspGenerator):
         if self.ingredient_name == "lettuce":
             depth_wrt_cam = cropped_depth[action_ypix, action_xpix]  # mm
         elif self.ingredient_name == "onions":
-            patch_size = 30
-            patch_xmin = max(0, action_xpix - patch_size // 2)
-            patch_xmax = min(cropped_depth.shape[1], action_xpix + patch_size // 2)
-            patch_ymin = max(0, action_ypix - patch_size // 2)
-            patch_ymax = min(cropped_depth.shape[0], action_ypix + patch_size // 2)
-            depth_wrt_cam = np.mean(
-                cropped_depth[patch_ymin:patch_ymax, patch_xmin:patch_xmax]
-            )  # mm
+            depth_wrt_cam = self.__get_z_from_depth_onions(
+                action_xpix, action_ypix, cropped_depth
+            )
 
         action_z = cam2bin_dist_mm - depth_wrt_cam
 
