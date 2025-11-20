@@ -274,7 +274,7 @@ class GranularGraspMethod(GraspGenerator):
     for a desired weight given RGB and depth images.
     """
 
-    def __init__(self, ingredient_name):
+    def __init__(self, ingredient_name, logger = None):
         """
         Initialize the neural network with a trained model.
 
@@ -289,6 +289,8 @@ class GranularGraspMethod(GraspGenerator):
         self.cam2bin_dist_mm = BIN_DIMS_DICT[self.pick_bin_id]["cam2bin_dist_mm"]
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.logger = logger
 
         # Load the model
         self.model = MassEstimationModel()
@@ -382,6 +384,7 @@ class GranularGraspMethod(GraspGenerator):
         # Penalize retry from the same patch
         if (row_i, col_i) in self.prev_patches:
             total_loss += self.retry_penalization
+            self.logger.info(f"Applying retry penalization to previously selected patch {(row_i, col_i)}.")
 
         return total_loss
 
@@ -637,6 +640,7 @@ class GranularGraspMethod(GraspGenerator):
         ), "Ingredient name does not match with initialized ingredient name"
 
         if is_retry == False:
+            self.logger.info("Retry: False. Resetting previous patches for new grasp attempt.")
             self.__reset()
 
         best_x_pix, best_y_pix = self.__get_best_xy_for_weight(

@@ -50,8 +50,8 @@ class ShreddedGraspServer(Node):
         )
         self.depth_queue = collections.deque(maxlen=5)
 
-        self.action_generator_gg_lettuce = GranularGraspMethod("lettuce")
-        self.action_generator_gg_onions = GranularGraspMethod("onions")
+        self.action_generator_gg_lettuce = GranularGraspMethod("lettuce", logger=self.get_logger())
+        self.action_generator_gg_onions = GranularGraspMethod("onions", logger=self.get_logger())
         self.action_generator_classical = ClassicalGraspGenerator()
         self.action_generator_lettuce = None
         self.action_generator_onions = None
