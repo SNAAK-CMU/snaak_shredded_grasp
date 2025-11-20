@@ -1,6 +1,7 @@
 int32 location_id
 string ingredient_name
 float32 desired_pickup_weight
+bool is_retry
 ---
 float32 x
 float32 y
