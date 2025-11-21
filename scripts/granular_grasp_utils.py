@@ -161,30 +161,6 @@ def create_transform_depth(cam2bin_dist_mm, bin_height_m=0.065):
     return transform
 
 
-def calculate_loss(row_i, col_i, w_desired, pred_weights, lambda_neighbor=0.25):
-    """Calculate loss for a specific cell considering neighbors"""
-    cell_loss = abs(pred_weights[row_i][col_i] - w_desired)
-    neighbor_loss = 0
-    n_neighbors = 0
-    for neighbor_row in [row_i - 1, row_i + 1]:
-        for neighbor_col in [col_i - 1, col_i + 1]:
-            # skip if neighbor is out of bounds
-            if not (
-                0 <= neighbor_row < pred_weights.shape[0]
-                and 0 <= neighbor_col < pred_weights.shape[1]
-            ):
-                continue
-
-            neighbor_loss += abs(pred_weights[neighbor_row][neighbor_col] - w_desired)
-            n_neighbors += 1
-
-    if n_neighbors > 0:
-        neighbor_loss = neighbor_loss / n_neighbors
-
-    total_loss = cell_loss + lambda_neighbor * neighbor_loss
-    return total_loss
-
-
 class ConvBlock(nn.Module):
     """Convolutional block with Conv2d, BatchNorm, and ReLU activation."""
 
@@ -298,7 +274,7 @@ class GranularGraspMethod(GraspGenerator):
     for a desired weight given RGB and depth images.
     """
 
-    def __init__(self, ingredient_name):
+    def __init__(self, ingredient_name, logger = None):
         """
         Initialize the neural network with a trained model.
 
@@ -314,6 +290,8 @@ class GranularGraspMethod(GraspGenerator):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        self.logger = logger
+
         # Load the model
         self.model = MassEstimationModel()
         self.model.load_state_dict(torch.load(model_path)["model_state_dict"])
@@ -328,6 +306,13 @@ class GranularGraspMethod(GraspGenerator):
 
         # Initialize coordinate converter
         self.coord_converter = CoordConverter(BIN_DIMS_DICT[self.pick_bin_id])
+
+        # Loss parameters
+        self.lambda_neighbor = 0.25
+        self.retry_penalization = 5.0
+
+        # List of indices of the patches selected in previous get_action call
+        self.prev_patches = []
 
     def __get_best_xy_for_weight(self, rgb_img, depth_img, w_desired):
         """
@@ -355,16 +340,53 @@ class GranularGraspMethod(GraspGenerator):
 
         # Calculate a score for each point on the grid based on the desired weight
         best_x, best_y, min_loss = 0, 0, float("inf")
+        best_row_i, best_col_i = -1, -1
         losses = np.zeros((centers.shape[0], centers.shape[1])) * 1000.0
         for row_i in range(centers.shape[0]):
             for col_i in range(centers.shape[1]):
-                loss = calculate_loss(row_i, col_i, w_desired, pred_weights)
+                loss = self.__calculate_loss(row_i, col_i, w_desired, pred_weights)
                 losses[row_i, col_i] = loss
                 if loss < min_loss:
                     min_loss = loss
-                    best_x, best_y = centers[row_i, col_i]
+                    best_row_i, best_col_i = row_i, col_i
+
+        self.prev_patches.append((best_row_i, best_col_i))  # remember the patch idx
+        best_x, best_y = centers[best_row_i, best_col_i]
 
         return best_x, best_y
+
+    def __calculate_loss(
+        self, row_i, col_i, w_desired, pred_weights, lambda_neighbor=0.25
+    ):
+        """Calculate loss for a specific cell considering neighbors"""
+        cell_loss = abs(pred_weights[row_i][col_i] - w_desired)
+        neighbor_loss = 0
+        n_neighbors = 0
+        for neighbor_row in [row_i - 1, row_i + 1]:
+            for neighbor_col in [col_i - 1, col_i + 1]:
+                # skip if neighbor is out of bounds
+                if not (
+                    0 <= neighbor_row < pred_weights.shape[0]
+                    and 0 <= neighbor_col < pred_weights.shape[1]
+                ):
+                    continue
+
+                neighbor_loss += abs(
+                    pred_weights[neighbor_row][neighbor_col] - w_desired
+                )
+                n_neighbors += 1
+
+        if n_neighbors > 0:
+            neighbor_loss = neighbor_loss / n_neighbors
+
+        total_loss = cell_loss + self.lambda_neighbor * neighbor_loss
+
+        # Penalize retry from the same patch
+        if (row_i, col_i) in self.prev_patches:
+            total_loss += self.retry_penalization
+            self.logger.info(f"Applying retry penalization to previously selected patch {(row_i, col_i)}.")
+
+        return total_loss
 
     def __infer_on_bin(self, rgb_img, depth_img):
         """
@@ -492,7 +514,7 @@ class GranularGraspMethod(GraspGenerator):
 
     def __get_z_from_depth_onions(self, x_pix, y_pix, depth_img):
         print("Getting z from depth for onions...")
-        
+
         window_size = 50
         patch_xmin = max(0, x_pix - window_size // 2)
         patch_xmax = min(depth_img.shape[1], x_pix + window_size // 2)
@@ -584,6 +606,12 @@ class GranularGraspMethod(GraspGenerator):
         z_corrected = action[2] + self.correction_dict["Z"]
         return x_corrected, y_corrected, z_corrected
 
+    def __reset(self):
+        """
+        Flush the saved patches from the previous get_action calls
+        """
+        self.prev_patches = []
+
     def get_action(
         self,
         rgb_img,
@@ -592,6 +620,7 @@ class GranularGraspMethod(GraspGenerator):
         ingredient_name,
         w_desired,
         location_id,
+        is_retry,
     ):
         """
         Get the action (x, y, z) for a desired weight given RGB and depth images.
@@ -609,6 +638,10 @@ class GranularGraspMethod(GraspGenerator):
         assert (
             ingredient_name == self.ingredient_name
         ), "Ingredient name does not match with initialized ingredient name"
+
+        if is_retry == False:
+            self.logger.info("Retry: False. Resetting previous patches for new grasp attempt.")
+            self.__reset()
 
         best_x_pix, best_y_pix = self.__get_best_xy_for_weight(
             rgb_img, depth_img, w_desired

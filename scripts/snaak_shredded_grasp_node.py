@@ -19,6 +19,7 @@ from snaak_shredded_grasp_constants import MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS
 GRASP_TECHNIQUE_LETTUCE = "GG"
 GRASP_TECHNIQUE_ONIONS = "GG"
 
+
 class ShreddedGraspServer(Node):
     def __init__(self):
         super().__init__("snaak_shredded_grasp")
@@ -49,8 +50,8 @@ class ShreddedGraspServer(Node):
         )
         self.depth_queue = collections.deque(maxlen=5)
 
-        self.action_generator_gg_lettuce = GranularGraspMethod("lettuce")
-        self.action_generator_gg_onions = GranularGraspMethod("onions")
+        self.action_generator_gg_lettuce = GranularGraspMethod("lettuce", logger=self.get_logger())
+        self.action_generator_gg_onions = GranularGraspMethod("onions", logger=self.get_logger())
         self.action_generator_classical = ClassicalGraspGenerator()
         self.action_generator_lettuce = None
         self.action_generator_onions = None
@@ -74,6 +75,7 @@ class ShreddedGraspServer(Node):
             location_id = request.location_id
             ingredient_name = request.ingredient_name
             pickup_weight = request.desired_pickup_weight
+            is_retry = request.is_retry
             self.get_logger().info("Generating grasp action...")
 
             if self.rgb_image is None:
@@ -108,10 +110,10 @@ class ShreddedGraspServer(Node):
                 ingredient_name_formatted,
                 pickup_weight,
                 location_id,
+                is_retry,
             )
             self.get_logger().info(f"Grasp action generated: {action}")
             action = np.clip(action, MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS)
-
 
             # If picking onions, clip the y action to be 5 mm less from the max
             if ingredient_name_formatted == "onions":
