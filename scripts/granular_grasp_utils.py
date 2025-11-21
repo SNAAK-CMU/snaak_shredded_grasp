@@ -71,7 +71,7 @@ ACTION_Z_MIN = -BIN_HEIGHT
 ACTION_Z_MAX = 0.02
 Z_BELOW_SURFACE_DICT = {
     "lettuce": 0.025,
-    "onions": 0.020,
+    "onions": 0.015,
 }
 
 MANIPULATION_CORRECTION_DICT = {
@@ -311,6 +311,9 @@ class GranularGraspMethod(GraspGenerator):
         self.lambda_neighbor = 0.25
         self.retry_penalization = 5.0
 
+        # Depth parameters
+        self.step_size = 10  # mm
+
         # List of indices of the patches selected in previous get_action call
         self.prev_patches = []
 
@@ -545,7 +548,7 @@ class GranularGraspMethod(GraspGenerator):
             if rightmost_peak_x < median_depth:
                 depth_wrt_cam = median_depth
             else:
-                step_size = 10  # mm
+                step_size = self.step_size  # mm
                 depth_wrt_cam = min(rightmost_peak_x, median_depth + step_size)
 
             print(f"Selected depth from peaks: {depth_wrt_cam}")
