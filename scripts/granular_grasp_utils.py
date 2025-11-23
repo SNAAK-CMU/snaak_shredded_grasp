@@ -313,6 +313,7 @@ class GranularGraspMethod(GraspGenerator):
 
         # Depth parameters
         self.step_size = 10  # mm
+        self.overweight_retry_depth_above_surface_m = 0.004  # m
 
         # List of indices of the patches selected in previous get_action call
         self.prev_patches = []
@@ -601,6 +602,7 @@ class GranularGraspMethod(GraspGenerator):
         # If prev retry was overweight, don't go below surface
         if was_overweight:
             action_z += z_below_surface
+            action_z += self.overweight_retry_depth_above_surface_m
             self.logger.info("Previous attempt was overweight, adjusting action_z to be at surface level.")
 
         if not (ACTION_Z_MIN <= action_z <= ACTION_Z_MAX):
