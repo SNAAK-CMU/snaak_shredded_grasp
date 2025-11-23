@@ -76,6 +76,7 @@ class ShreddedGraspServer(Node):
             ingredient_name = request.ingredient_name
             pickup_weight = request.desired_pickup_weight
             is_retry = request.is_retry
+            was_overweight = request.was_overweight
             self.get_logger().info("Generating grasp action...")
 
             if self.rgb_image is None:
@@ -111,6 +112,7 @@ class ShreddedGraspServer(Node):
                 pickup_weight,
                 location_id,
                 is_retry,
+                was_overweight,
             )
             self.get_logger().info(f"Grasp action generated: {action}")
             action = np.clip(action, MIN_CLAMP_BOUNDS, MAX_CLAMP_BOUNDS)

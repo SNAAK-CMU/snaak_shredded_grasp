@@ -564,7 +564,7 @@ class GranularGraspMethod(GraspGenerator):
             )  # mm
             return depth_wrt_cam
 
-    def __get_z_from_depth(self, x, y, depth_img):
+    def __get_z_from_depth(self, x, y, depth_img, was_overweight):
 
         if self.ingredient_name == "onions":
             depth_img = cv2.rotate(depth_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
@@ -598,6 +598,11 @@ class GranularGraspMethod(GraspGenerator):
 
         action_z -= z_below_surface  # Go deeper than the surface of lettuce
 
+        # If prev retry was overweight, don't go below surface
+        if was_overweight:
+            action_z += z_below_surface
+            self.logger.info("Previous attempt was overweight, adjusting action_z to be at surface level.")
+
         if not (ACTION_Z_MIN <= action_z <= ACTION_Z_MAX):
             action_z = np.clip(action_z, ACTION_Z_MIN, ACTION_Z_MAX)
 
@@ -624,6 +629,7 @@ class GranularGraspMethod(GraspGenerator):
         w_desired,
         location_id,
         is_retry,
+        was_overweight,
     ):
         """
         Get the action (x, y, z) for a desired weight given RGB and depth images.
@@ -646,6 +652,11 @@ class GranularGraspMethod(GraspGenerator):
             self.logger.info("Retry: False. Resetting previous patches for new grasp attempt.")
             self.__reset()
 
+            # If not a retry, overweight flag should be false
+            if was_overweight:
+                self.logger.info("Not a retry, but was_overweight is True. Setting was_overweight to False.")
+                was_overweight = False
+
         best_x_pix, best_y_pix = self.__get_best_xy_for_weight(
             rgb_img, depth_img, w_desired
         )
@@ -653,7 +664,7 @@ class GranularGraspMethod(GraspGenerator):
         action_x, action_y = self.coord_converter.pix_xy_to_action(
             best_x_pix, best_y_pix
         )
-        action_z = self.__get_z_from_depth(action_x, action_y, depth_img)
+        action_z = self.__get_z_from_depth(action_x, action_y, depth_img, was_overweight)
 
         action = (float(action_x), float(action_y), float(action_z))
 
